@@ -32,10 +32,10 @@ def process_data_and_fit_gamlss(data, tract, feature):
     # Compute asymmetry: (Left - Right) / (Left + Right)
     asym_col_name = f"{tract}_asymmetry_{feature}"
     data = data.copy()
-    data[asym_col_name] = (
-        data[f"{tract}_left-{feature}"] - data[f"{tract}_right-{feature}"]
+    data.loc[:, asym_col_name] = (
+        data.loc[:, f"{tract}_left-{feature}"] - data.loc[:, f"{tract}_right-{feature}"]
     ) / (
-        data[f"{tract}_left-{feature}"] + data[f"{tract}_right-{feature}"]
+        data.loc[:, f"{tract}_left-{feature}"] + data.loc[:, f"{tract}_right-{feature}"]
     )
 
     # Convert pandas DataFrame to R dataframe
@@ -76,14 +76,18 @@ male_data = data[data['sex'] == 1]
 female_data = data[data['sex'] == 0]
 
 # Fit the models
-male_model, male_asym_col_name = process_data_and_fit_gamlss(male_data, tract, feature)
-female_model, female_asym_col_name = process_data_and_fit_gamlss(female_data, tract, feature)
+# Fit the models
+male_model, male_asym_col_name, male_data = process_data_and_fit_gamlss(male_data, tract, feature)
+female_model, female_asym_col_name, female_data = process_data_and_fit_gamlss(female_data, tract, feature)
 
 # Get the fitted values
 male_fitted_values = get_gamlss_fitted_values(male_model, unique_ages)
 female_fitted_values = get_gamlss_fitted_values(female_model, unique_ages)
 
-# Plotting
+# Plotting the results with fitted trends
+plt.figure(figsize=(14, 7))
+
+# Male plot
 plt.subplot(1, 2, 1)
 plt.scatter(male_data['age'], male_data[male_asym_col_name], label="Male Data", color="blue", alpha=0.6)
 plt.plot(unique_ages, male_fitted_values, label="GAMLSS Fitted Trend", color="black")
