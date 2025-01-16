@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import sem
+from scipy import stats 
 
 
 # Activate the automatic conversion of rpy2 objects to pandas objects
@@ -113,13 +114,62 @@ female_data = remove_outliers(female_data, female_asym_col_name)
 male_fitted_values = get_gamlss_fitted_values(male_model, unique_ages)
 female_fitted_values = get_gamlss_fitted_values(female_model, unique_ages)
 
-# Plotting the results with fitted trends
+# Function to calculate the 95% Confidence Interval (CI) for asymmetry values
+def calculate_confidence_interval(data, asym_col_name, confidence_level=0.95):
+    # Calculate mean and standard error of the mean (SEM)
+    mean = data[asym_col_name].mean()
+    sem_value = sem(data[asym_col_name])
+    
+    # Calculate the confidence interval
+    ci_lower, ci_upper = stats.norm.interval(confidence_level, loc=mean, scale=sem_value)
+    return ci_lower, ci_upper, mean, sem_value
+
+# Function to remove outliers based on CI bounds
+def remove_outliers_based_on_ci(data, asym_col_name, ci_lower, ci_upper):
+    # Remove outliers: values outside the CI range
+    data_filtered = data[(data[asym_col_name] >= ci_lower) & (data[asym_col_name] <= ci_upper)]
+    return data_filtered
+
+# Modify the 'process_data_and_fit_gamlss' function to include CI calculation and outlier removal
+def process_data_and_fit_gamlss_with_ci(data, tract, feature, confidence_level=0.95):
+    # Compute asymmetry: (Left - Right) / (Left + Right)
+    asym_col_name = f"{tract}_asymmetry_{feature}"
+    data = data.copy()
+    data.loc[:, asym_col_name] = (
+        data.loc[:, f"{tract}_left-{feature}"] - data.loc[:, f"{tract}_right-{feature}"]
+    ) / (
+        data.loc[:, f"{tract}_left-{feature}"] + data.loc[:, f"{tract}_right-{feature}"]
+    )
+
+    # Calculate the CI for the asymmetry column
+    ci_lower, ci_upper, mean, sem_value = calculate_confidence_interval(data, asym_col_name, confidence_level)
+    print(f"{asym_col_name} 95% CI: ({ci_lower:.2f}, {ci_upper:.2f})")
+    print(f"Mean: {mean:.2f}, SEM: {sem_value:.2f}")
+
+    # Return the CI values as well
+    return ci_lower, ci_upper, mean, sem_value
+
+
+
+male_ci_lower, male_ci_upper, male_mean, male_sem = process_data_and_fit_gamlss_with_ci(male_data, tract, feature)
+female_ci_lower, female_ci_upper, female_mean, female_sem = process_data_and_fit_gamlss_with_ci(female_data, tract, feature)
+
+
+# Get the fitted values from the GAMLSS model after CI filtering
+male_fitted_values = get_gamlss_fitted_values(male_model, unique_ages)
+female_fitted_values = get_gamlss_fitted_values(female_model, unique_ages)
+
+# Plotting the results with fitted trends and confidence intervals
 plt.figure(figsize=(14, 7))
 
 # Male plot
 plt.subplot(1, 2, 1)
 plt.scatter(male_data['age'], male_data[male_asym_col_name], label="Male Data", color="blue", alpha=0.1)
 plt.plot(unique_ages, male_fitted_values, label="GAMLSS Fitted Trend", color="black")
+
+# Add confidence intervals as a shaded region
+plt.fill_between(unique_ages, male_ci_lower, male_ci_upper, color="blue", alpha=0.3, label="95% Confidence Interval")
+
 plt.title(f"Male {feature} Asymmetry in the {tract} Tract")
 plt.xlabel('Age')
 plt.ylabel(f'{feature} Asymmetry ({tract})')
@@ -129,6 +179,11 @@ plt.legend()
 plt.subplot(1, 2, 2)
 plt.scatter(female_data['age'], female_data[female_asym_col_name], label="Female Data", color="red", alpha=0.1)
 plt.plot(unique_ages, female_fitted_values, label="GAMLSS Fitted Trend", color="black")
+
+# Add confidence intervals as a shaded region
+plt.fill_between(unique_ages, female_ci_lower, female_ci_upper, color="red", alpha=0.3, label="95% Confidence Interval")
+
+
 plt.title(f"Female {feature} Asymmetry in the {tract} Tract")
 plt.xlabel('Age')
 plt.ylabel(f'{feature} Asymmetry ({tract})')
